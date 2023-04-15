@@ -4,28 +4,36 @@
 package server
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"net/http"
+	"net/url"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/discord-gophers/goapi-gen/runtime"
 	openapi_types "github.com/discord-gophers/goapi-gen/types"
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 )
 
 // EveryTypeOptional defines model for EveryTypeOptional.
 type EveryTypeOptional struct {
-	ArrayInlineField     []int               `json:"array_inline_field,omitempty"`
-	ArrayReferencedField []SomeObject        `json:"array_referenced_field,omitempty"`
-	BoolField            *bool               `json:"bool_field,omitempty"`
-	ByteField            []byte              `json:"byte_field,omitempty"`
-	DateField            *openapi_types.Date `json:"date_field,omitempty"`
-	DateTimeField        *time.Time          `json:"date_time_field,omitempty"`
-	DoubleField          *float64            `json:"double_field,omitempty"`
-	FloatField           *float32            `json:"float_field,omitempty"`
+	ArrayInlineField     []int                `json:"array_inline_field,omitempty"`
+	ArrayReferencedField []SomeObject         `json:"array_referenced_field,omitempty"`
+	BoolField            *bool                `json:"bool_field,omitempty"`
+	ByteField            []byte               `json:"byte_field,omitempty"`
+	DateField            *openapi_types.Date  `json:"date_field,omitempty"`
+	DateTimeField        *time.Time           `json:"date_time_field,omitempty"`
+	DoubleField          *float64             `json:"double_field,omitempty"`
+	EmailField           *openapi_types.Email `json:"email_field,omitempty"`
+	FloatField           *float32             `json:"float_field,omitempty"`
 	InlineObjectField    *struct {
 		Name   string `json:"name"`
 		Number int    `json:"number"`
@@ -40,15 +48,15 @@ type EveryTypeOptional struct {
 
 // EveryTypeRequired defines model for EveryTypeRequired.
 type EveryTypeRequired struct {
-	ArrayInlineField     []int                `json:"array_inline_field"`
-	ArrayReferencedField []SomeObject         `json:"array_referenced_field"`
-	BoolField            bool                 `json:"bool_field"`
-	ByteField            []byte               `json:"byte_field"`
-	DateField            openapi_types.Date   `json:"date_field"`
-	DateTimeField        time.Time            `json:"date_time_field"`
-	DoubleField          float64              `json:"double_field"`
-	EmailField           *openapi_types.Email `json:"email_field,omitempty"`
-	FloatField           float32              `json:"float_field"`
+	ArrayInlineField     []int               `json:"array_inline_field"`
+	ArrayReferencedField []SomeObject        `json:"array_referenced_field"`
+	BoolField            bool                `json:"bool_field"`
+	ByteField            []byte              `json:"byte_field"`
+	DateField            openapi_types.Date  `json:"date_field"`
+	DateTimeField        time.Time           `json:"date_time_field"`
+	DoubleField          float64             `json:"double_field"`
+	EmailField           openapi_types.Email `json:"email_field"`
+	FloatField           float32             `json:"float_field"`
 	InlineObjectField    struct {
 		Name   string `json:"name"`
 		Number int    `json:"number"`
@@ -859,4 +867,105 @@ func WithErrorHandler(handler func(w http.ResponseWriter, r *http.Request, err e
 	return func(s *ServerOptions) {
 		s.ErrorHandlerFunc = handler
 	}
+}
+
+// Base64 encoded, gzipped, json marshaled Swagger object
+var swaggerSpec = []string{
+
+	"H4sIAAAAAAAC/+xZ32/bNhD+Vwhuj7KVJkUf/NZ1Q1EMxYYkwx5aw6Cts8xGIhWSSmIY/t+HI/WDkujI",
+	"aZxgD3mLySN59913x4/Kjq5kXkgBwmg629GCKZaDAWV/MZWWOQiDfyegV4oXhktBZ/RK5kCa6YhyHCyY",
+	"2dCICpYDnVFvVsFtyRUkdGZUCRHVqw3kDHc12wJttVFcpHS/36OxLqTQYD24rH78y83mEtagQKwAJ1ZS",
+	"mMozVhQZXzH0LP6h0b2dd8KvCtZ0Rn+J20BjN6tjLXNYyOUPWBl3djfIj6T2hTgjcs/NhjCCXhPVuLOP",
+	"6BXPiwxqb5/kYKFkAcpwF7ADbwiMD+I3ZzUPuqytJ33P7Q5V2Lj9H3egttfbAv6yK1k29IQpxbYLLjIu",
+	"YLHmkCU4yg3k2nOQCwMpKMSgGrHr8LfboIEpCWxydHKGuy+lzNodq1kcBCbs/NZ4bq+lyplBi60BGvXh",
+	"jWjCguY4fNDc8PzQmgnOBRfKcpkFV9mJdoko86XDFXLGs8AKOx46Y51JZgIL7HjohCrJDux24VHMjOp9",
+	"ApwIsbaxn9uDzcV5wFM73nrqkYwL8+F9eMWH94dWDHjiTTtvBhYtOCECP4G3DqfB/n7Ha4rxsgHrrRjf",
+	"ivGtGF+9GLsQ+YB0g/UD6dGom/FeSJ1K6bnT5VanCIYUD9MkgE8Uah0H20GnUpETl6BB3UHyJ2zvpQoQ",
+	"cbVhQkA2DqadrbaUpXIq7khS37GshGOqJ8xxtxzP9unwfOnFxVrigoyvoFJ9lfb9+uXatkluMvx5DdqQ",
+	"KwRSoTugtFNr76Zn0zM0lAUIVnA6oxfTs+k7Glktbb2KAW+HCTo1kZ5YS8GGgAFYZfkloTP6GcxQ2fUk",
+	"9fnZ2ckE9PCwgCZlBB6YFaVyTWw0TkA7MS1IHRVxebJKtcxzprZ0hmH6a2R7TkTjFMzE6d3HEHHa/CVh",
+	"GH1H9EX5WirC6lH7bOpG/RkMGts6IXd8aGpDRwAnTKX6sejx5fQRbaLO4+5b/0X30UvEbYmA9593drR9",
+	"39XWC8+uhWv0LthHu8Bzy9XZcQ7U1oujXpo/49AoJBtgia3pyiX3exyR4H26n4cpGmJeYxf3Xp4DHhlQ",
+	"rtLaZk8aIhAmEn9CNdv0dmlY1OFes1LHuzSTS48M+3jX/DlGz+ZhHyBpKPjWJG6Q/p+B93ipeXtwQRxy",
+	"traJXskCwt9TegA/k+zzQIK9PHTSjIvjXdUpF/hrNKWfnDFeDWONB3td9V2lC21eZobba6M0RWnsBaDD",
+	"2Pi+PQoMiDK3agQeEEHb5ucD1X6ITC9wWUTWlbjIGO/tEXgonuJawQvXfcxabsmX391toiqZN7lpdd6h",
+	"9PYl4QtC1T8qAIInLVgLRMWnOixy02zQ1xZVdQfs4voC7nWyQuoAMJ8UMAONtn1mH7stQZvfZLI9vVJr",
+	"vjEEwKznyBKP7tfR/uQd1oHmEuVw6wB/Hu+qZ8uTE3A+1nWO+IDdO/uY79iPiAl74FG6pjrXjoalRFg5",
+	"nJ40l21aBlypFb/jyitww5WqA6e9KbqMuYh3a5ZlZqNkmW4cW8oAWf4pEo8sFycgi3fs04jyjNR1n6/8",
+	"0DeVA8/aQE4b/V2h/EptwGXjUKrRiSm53nhJJxgT4dpr8d9F1bsjoiXJ2Q0QXSogZsMMScFoUihY8wdI",
+	"iJGE3UmeEL0Vhj0QUEoq/V00VLI+9hTuyI0Y+CfVz8AU3ml4a3UvOtWxjJ1mY2kKySTnSZLBPVMwptiu",
+	"7YKvrf1J0oxSONiu/5b6BY+N6MMklV70WNWtB95x89BLJ+BUaD/sAJ2tcC/7lcc1kVJl+CY0ppjFcSVU",
+	"piuZ0/18/18AAAD//1OD2zV5HQAA",
+}
+
+// GetSwagger returns the content of the embedded swagger specification file
+// or error if failed to decode
+func decodeSpec() ([]byte, error) {
+	zipped, err := base64.StdEncoding.DecodeString(strings.Join(swaggerSpec, ""))
+	if err != nil {
+		return nil, fmt.Errorf("error base64 decoding spec: %s", err)
+	}
+	zr, err := gzip.NewReader(bytes.NewReader(zipped))
+	if err != nil {
+		return nil, fmt.Errorf("error decompressing spec: %s", err)
+	}
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(zr)
+	if err != nil {
+		return nil, fmt.Errorf("error decompressing spec: %s", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
+var rawSpec = decodeSpecCached()
+
+// a naive cached of a decoded swagger spec
+func decodeSpecCached() func() ([]byte, error) {
+	data, err := decodeSpec()
+	return func() ([]byte, error) {
+		return data, err
+	}
+}
+
+// Constructs a synthetic filesystem for resolving external references when loading openapi specifications.
+func PathToRawSpec(pathToFile string) map[string]func() ([]byte, error) {
+	var res = make(map[string]func() ([]byte, error))
+	if len(pathToFile) > 0 {
+		res[pathToFile] = rawSpec
+	}
+
+	return res
+}
+
+// GetSwagger returns the Swagger specification corresponding to the generated code
+// in this file. The external references of Swagger specification are resolved.
+// The logic of resolving external references is tightly connected to "import-mapping" feature.
+// Externally referenced files must be embedded in the corresponding golang packages.
+// Urls can be supported but this task was out of the scope.
+func GetSwagger() (swagger *openapi3.T, err error) {
+	var resolvePath = PathToRawSpec("")
+
+	loader := openapi3.NewLoader()
+	loader.IsExternalRefsAllowed = true
+	loader.ReadFromURIFunc = func(loader *openapi3.Loader, url *url.URL) ([]byte, error) {
+		var pathToFile = url.String()
+		pathToFile = path.Clean(pathToFile)
+		getSpec, ok := resolvePath[pathToFile]
+		if !ok {
+			err1 := fmt.Errorf("path not found: %s", pathToFile)
+			return nil, err1
+		}
+		return getSpec()
+	}
+	var specData []byte
+	specData, err = rawSpec()
+	if err != nil {
+		return
+	}
+	swagger, err = loader.LoadFromData(specData)
+	if err != nil {
+		return
+	}
+	return
 }
